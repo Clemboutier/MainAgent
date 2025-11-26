@@ -1,5 +1,3 @@
-![PocketFlow Logo](https://github.com/the-pocket/.github/raw/main/assets/abstraction.png)
-
 # MainAgent
 
 PocketFlow-based research assistant with:
