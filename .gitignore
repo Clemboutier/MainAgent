@@ -1,0 +1,15 @@
+# node / frontend artifacts
+frontend/node_modules
+frontend/.next
+frontend/.turbo
+frontend/.vercel
+
+# python
+backend/.venv
+backend/__pycache__
+
+# env & data
+.env
+backend/data/*.faiss
+backend/data/*.pkl
+

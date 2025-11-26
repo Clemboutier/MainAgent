@@ -1,0 +1,15 @@
+{
+  "$schema": "https://openapi.vercel.sh/config-schema.json",
+  "functions": {
+    "api/index.py": {
+      "runtime": "python3.11"
+    }
+  },
+  "env": {
+    "OPENAI_API_KEY": "@openai_api_key",
+    "SEARCH_API_KEY": "@search_api_key",
+    "RAG_INDEX_PATH": "backend/data/index.faiss",
+    "RAG_STORE_PATH": "backend/data/store.pkl"
+  }
+}
+
