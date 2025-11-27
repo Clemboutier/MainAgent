@@ -98,7 +98,7 @@ class RetrieveRAGNode(Node):
         return shared.get("query_embedding")
 
     def exec(self, embedding):
-        print("📚 RetrieveRAGNode: Searching FAISS index for relevant document chunks")
+        print("📚 RetrieveRAGNode: Searching Pinecone index for relevant document chunks")
         if not embedding:
             return []
         store = get_rag_store()

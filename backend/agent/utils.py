@@ -1,23 +1,21 @@
 """
 Utility helpers for the PocketFlow agent.
 
-Includes LLM wrappers, embedding helpers, FAISS utilities, and chunking.
+Includes LLM wrappers, embedding helpers, Pinecone utilities, and chunking.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import pickle
 from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Optional
 
-import faiss
-import numpy as np
 from duckduckgo_search import DDGS
 from openai import OpenAI
 from dotenv import load_dotenv
+from pinecone import Pinecone, ServerlessSpec
 
 load_dotenv()
 
@@ -87,52 +85,72 @@ def fixed_size_chunk(text: str, chunk_size: int = 2000) -> List[str]:
 
 
 class RAGStore:
-    """Wrapper around a FAISS index + metadata store."""
+    """Wrapper around a Pinecone index for vector search."""
 
-    def __init__(self, index_path: Path, store_path: Path) -> None:
-        self.index_path = index_path
-        self.store_path = store_path
-        self.index: Optional[faiss.Index] = None
-        self.items: List[Dict[str, str]] = []
-        self._load()
+    def __init__(self, index_name: str) -> None:
+        self.index_name = index_name
+        self.pc: Optional[Pinecone] = None
+        self.index = None
+        self._connect()
 
-    def _load(self) -> None:
-        if not self.index_path.exists() or not self.store_path.exists():
-            return
-        self.index = faiss.read_index(str(self.index_path))
-        with self.store_path.open("rb") as f:
-            payload = pickle.load(f)
-        self.items = payload.get("items", [])
+    def _connect(self) -> None:
+        """Initialize connection to Pinecone."""
+        api_key = os.getenv("PINECONE_API_KEY")
+        if not api_key:
+            raise RuntimeError("PINECONE_API_KEY is not set in environment variables")
+        
+        self.pc = Pinecone(api_key=api_key)
+        
+        # Check if index exists, if not create it
+        existing_indexes = [idx.name for idx in self.pc.list_indexes()]
+        
+        if self.index_name not in existing_indexes:
+            # Get embedding dimension from environment or use default for text-embedding-3-small
+            dimension = int(os.getenv("PINECONE_DIMENSION", "1536"))
+            
+            # Create serverless index
+            self.pc.create_index(
+                name=self.index_name,
+                dimension=dimension,
+                metric="cosine",
+                spec=ServerlessSpec(
+                    cloud=os.getenv("PINECONE_CLOUD", "aws"),
+                    region=os.getenv("PINECONE_REGION", "us-east-1")
+                )
+            )
+        
+        self.index = self.pc.Index(self.index_name)
 
     def search(self, embedding: List[float], top_k: int = 3) -> List[Dict[str, str]]:
-        if not self.index or not self.items:
+        """Search for similar vectors in Pinecone index."""
+        if not self.index:
             return []
-        vector = np.array([embedding], dtype=np.float32)
-        faiss.normalize_L2(vector)
-        k = min(top_k, self.index.ntotal)
-        if k == 0:
-            return []
-        distances, indices = self.index.search(vector, k)
-        results = []
-        for idx, score in zip(indices[0], distances[0]):
-            if idx == -1:
-                continue
-            item = self.items[idx]
-            results.append(
-                {
-                    "text": item["text"],
-                    "source": item["source"],
-                    "score": float(score),
-                }
+        
+        try:
+            # Query Pinecone
+            query_response = self.index.query(
+                vector=embedding,
+                top_k=top_k,
+                include_metadata=True
             )
-        return results
+            
+            results = []
+            for match in query_response.matches:
+                results.append({
+                    "text": match.metadata.get("text", ""),
+                    "source": match.metadata.get("source", "unknown"),
+                    "score": float(match.score),
+                })
+            
+            return results
+        except Exception as e:
+            print(f"Error querying Pinecone: {e}")
+            return []
 
 
 @lru_cache(maxsize=1)
 def get_rag_store() -> RAGStore:
-    """Return a cached FAISS store instance."""
-    base_dir = Path(os.getenv("RAG_BASE_DIR", Path(__file__).resolve().parents[1]))
-    index_path = Path(os.getenv("RAG_INDEX_PATH", base_dir / "data" / "index.faiss"))
-    store_path = Path(os.getenv("RAG_STORE_PATH", base_dir / "data" / "store.pkl"))
-    return RAGStore(index_path=index_path, store_path=store_path)
+    """Return a cached Pinecone store instance."""
+    index_name = os.getenv("PINECONE_INDEX_NAME", "mainagent-rag")
+    return RAGStore(index_name=index_name)
 
