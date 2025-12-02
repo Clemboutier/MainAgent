@@ -67,27 +67,20 @@ The MainAgent uses a **decision-based routing system** where the `DecideActionNo
 
 ```mermaid
 flowchart TD
-    Start([User Question]) --> Decide{🤔 DecideActionNode<br/>Analyze Question}
+    Start([User Question]) --> Decide{🤔 DecideActionNode}
     
-    Decide -->|Need more context| Search[🔍 SearchWebNode<br/>Web Search]
-    Decide -->|Use knowledge base| Embed[🧮 EmbedQueryNode<br/>Generate Embedding]
-    Decide -->|Use MCP tool| ExecuteTool[🛠️ ExecuteMCPToolNode<br/>Call External Tool]
-    Decide -->|Can answer directly| Answer[✍️ AnswerNode<br/>Synthesize Response]
+    Decide -->|Need weather| Tool[🛠️ ExecuteMCPToolNode]
+    Decide -->|Need prompts| Tool
+    Decide -->|Need search| Search[🔍 SearchWebNode]
+    Decide -->|Need RAG| Embed[🧮 EmbedQueryNode]
+    Decide -->|Can answer| Answer[✍️ AnswerNode]
     
+    Tool -->|Add context| Decide
     Search -->|Add context| Decide
-    ExecuteTool -->|Add result| Decide
-    
-    Embed --> Retrieve[📚 RetrieveRAGNode<br/>Query Pinecone Index]
-    Retrieve -->|Retrieved docs| Answer
+    Embed --> Retrieve[📚 RetrieveRAGNode]
+    Retrieve --> Answer
     
     Answer --> End([Return Answer])
-    
-    style Decide fill:#ffd700,stroke:#333,stroke-width:3px
-    style Search fill:#87ceeb,stroke:#333,stroke-width:2px
-    style Embed fill:#98fb98,stroke:#333,stroke-width:2px
-    style Retrieve fill:#dda0dd,stroke:#333,stroke-width:2px
-    style ExecuteTool fill:#ff69b4,stroke:#333,stroke-width:2px
-    style Answer fill:#ffa07a,stroke:#333,stroke-width:2px
 ```
 
 ---
@@ -210,6 +203,74 @@ langfuse_get_prompt(name="greeting")
 - Concise answer
 - Inline source citations
 - Acknowledgment of uncertainty when applicable
+
+---
+### MCP Integration 
+
+
+### Architecture
+
+```mermaid
+graph TB
+    subgraph "MCP Integration"
+        Client[MCP Client]
+        Weather[Apify Weather Server]
+        Langfuse[Langfuse MCP Server]
+    end
+    
+    subgraph "Agent Flow"
+        Decide[DecideActionNode]
+        Execute[ExecuteMCPToolNode]
+    end
+    
+    Decide -->|Discovers tools| Client
+    Client -->|HTTP/SSE| Weather
+    Client -->|HTTP/SSE| Langfuse
+    Decide -->|action: tool| Execute
+    Execute -->|Calls tool| Client
+    Execute -->|Returns result| Decide
+```
+
+
+### Supported MCP Servers
+
+#### 1. Apify Weather Server
+**URL**: `https://jiri-spilka--weather-mcp-server.apify.actor/mcp`
+
+**Tools**:
+- `weather_get_weather` - Current weather for any city
+- `weather_get_weather_by_datetime_range` - Historical weather data
+- `weather_get_current_datetime` - Current time for any timezone
+
+**Configuration**:
+```bash
+APIFY_API_TOKEN=apify_api_your_token_here
+```
+
+#### 2. Langfuse MCP Server
+**URL**: `{LANGFUSE_HOST}/api/public/mcp`
+
+**Tools** (Prompt Management & Observability):
+- `langfuse_list_prompts` - List all prompts
+- `langfuse_get_prompt` - Get a specific prompt
+- `langfuse_compile_prompt` - Compile prompt with variables
+- `langfuse_create_prompt` - Create new prompt
+- And more...
+
+### How It Works
+
+1. **Tool Discovery**: On startup, `DecideActionNode` queries all configured MCP servers
+2. **Tool Naming**: Tools are prefixed with server name (e.g., `weather_get_weather`)
+3. **Routing**: `ExecuteMCPToolNode` routes tool calls to the appropriate server
+4. **Dynamic**: Servers can be enabled/disabled by adding/removing credentials
+
+### Example Questions
+
+With MCP servers configured:
+- "What's the weather in Paris?" → Uses `weather_get_weather`
+- "What time is it in Tokyo?" → Uses `weather_get_current_datetime`
+- "List my prompts" → Uses `langfuse_list_prompts`
+- "Get the customer_greeting prompt" → Uses `langfuse_get_prompt`
 
 ---
 
@@ -398,99 +459,5 @@ The `/api/evals` endpoint provides real-time metrics:
 - Session tracking
 
 ---
-
-## Model Context Protocol (MCP) Integration
-
-MainAgent now supports **multiple MCP servers** for extended capabilities beyond traditional RAG and web search.
-
-### Architecture
-
-```mermaid
-graph TB
-    subgraph "MCP Integration"
-        Client[MCP Client]
-        Weather[Apify Weather Server]
-        Langfuse[Langfuse MCP Server]
-    end
-    
-    subgraph "Agent Flow"
-        Decide[DecideActionNode]
-        Execute[ExecuteMCPToolNode]
-    end
-    
-    Decide -->|Discovers tools| Client
-    Client -->|HTTP/SSE| Weather
-    Client -->|HTTP/SSE| Langfuse
-    Decide -->|action: tool| Execute
-    Execute -->|Calls tool| Client
-    Execute -->|Returns result| Decide
-```
-
-### Supported MCP Servers
-
-#### 1. Apify Weather Server
-**URL**: `https://jiri-spilka--weather-mcp-server.apify.actor/mcp`
-
-**Tools**:
-- `weather_get_weather` - Current weather for any city
-- `weather_get_weather_by_datetime_range` - Historical weather data
-- `weather_get_current_datetime` - Current time for any timezone
-
-**Configuration**:
-```bash
-APIFY_API_TOKEN=apify_api_your_token_here
-```
-
-#### 2. Langfuse MCP Server
-**URL**: `{LANGFUSE_HOST}/api/public/mcp`
-
-**Tools** (Prompt Management & Observability):
-- `langfuse_list_prompts` - List all prompts
-- `langfuse_get_prompt` - Get a specific prompt
-- `langfuse_compile_prompt` - Compile prompt with variables
-- `langfuse_create_prompt` - Create new prompt
-- And more...
-
-**Configuration**:
-```bash
-LANGFUSE_HOST=https://cloud.langfuse.com
-LANGFUSE_PUBLIC_KEY=pk-lf-your_public_key_here
-LANGFUSE_SECRET_KEY=sk-lf-your_secret_key_here
-```
-
-### How It Works
-
-1. **Tool Discovery**: On startup, `DecideActionNode` queries all configured MCP servers
-2. **Tool Naming**: Tools are prefixed with server name (e.g., `weather_get_weather`)
-3. **Routing**: `ExecuteMCPToolNode` routes tool calls to the appropriate server
-4. **Dynamic**: Servers can be enabled/disabled by adding/removing credentials
-
-### Updated Flow
-
-```mermaid
-flowchart TD
-    Start([User Question]) --> Decide{🤔 DecideActionNode}
-    
-    Decide -->|Need weather| Tool[🛠️ ExecuteMCPToolNode]
-    Decide -->|Need prompts| Tool
-    Decide -->|Need search| Search[🔍 SearchWebNode]
-    Decide -->|Need RAG| Embed[🧮 EmbedQueryNode]
-    Decide -->|Can answer| Answer[✍️ AnswerNode]
-    
-    Tool -->|Add context| Decide
-    Search -->|Add context| Decide
-    Embed --> Retrieve[📚 RetrieveRAGNode]
-    Retrieve --> Answer
-    
-    Answer --> End([Return Answer])
-```
-
-### Example Questions
-
-With MCP servers configured:
-- "What's the weather in Paris?" → Uses `weather_get_weather`
-- "What time is it in Tokyo?" → Uses `weather_get_current_datetime`
-- "List my prompts" → Uses `langfuse_list_prompts`
-- "Get the customer_greeting prompt" → Uses `langfuse_get_prompt`
 
 
