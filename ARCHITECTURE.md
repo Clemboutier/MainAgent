@@ -347,29 +347,6 @@ sequenceDiagram
 
 ---
 
-## Decision Logic Examples
-
-```mermaid
-graph LR
-    subgraph "Question: 'What is Python?'"
-        Q1[Question] --> D1{Has RAG docs?}
-        D1 -->|Yes| A1[Answer with RAG]
-    end
-    
-    subgraph "Question: 'Latest news about AI?'"
-        Q2[Question] --> D2{Needs current info?}
-        D2 -->|Yes| S2[Search Web]
-        S2 --> A2[Answer with context]
-    end
-    
-    subgraph "Question: 'What's 2+2?'"
-        Q3[Question] --> D3{Simple query?}
-        D3 -->|Yes| A3[Direct Answer]
-    end
-```
-
----
-
 
 ## Running the Application
 
