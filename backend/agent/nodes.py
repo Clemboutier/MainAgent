@@ -5,6 +5,7 @@ import json
 from typing import Any, Dict, List
 from pocketflow import Node
 from .utils import call_llm, get_embedding, get_rag_store, search_web_ddg
+from .mcp_client import get_tools, call_tool
 
 
 class DecideActionNode(Node):
@@ -18,7 +19,12 @@ class DecideActionNode(Node):
         }
 
     def exec(self, prep_res: Dict[str, Any]):
-        print("🤔 DecideActionNode: Analyzing question and deciding next action (search/RAG/answer)")
+        print("🤔 DecideActionNode: Analyzing question and deciding next action (search/RAG/tool/answer)")
+        
+        # Fetch available tools
+        tools = get_tools()
+        tool_desc = json.dumps(tools, indent=2)
+        
         rag_context = "\n".join(
             f"- Source: {item['source']}\n  Excerpt: {item['text']}"
             for item in prep_res["rag_results"]
@@ -31,11 +37,16 @@ SEARCH CONTEXT:\n{prep_res['context'] or 'none'}
 
 RAG RESULTS:\n{rag_context or 'none'}
 
+AVAILABLE TOOLS:
+{tool_desc}
+
 Decide the next action.
 Return JSON with keys:
-- action: search | rag | answer
+- action: search | rag | tool | answer
 - reason: short text
 - search_query: string (required if action == "search")
+- tool_name: string (required if action == "tool")
+- tool_args: dict (required if action == "tool")
 - answer: string (required if action == "answer")
 """
         raw = call_llm(prompt)
@@ -49,9 +60,14 @@ Return JSON with keys:
         action = exec_res.get("action", "rag")
         if action == "search":
             shared["search_query"] = exec_res.get("search_query", shared["question"])
+        elif action == "tool":
+            shared["tool_name"] = exec_res.get("tool_name")
+            shared["tool_args"] = exec_res.get("tool_args", {})
         elif action == "answer":
             shared["answer"] = exec_res.get("answer", "")
         return action
+
+
 
 
 class SearchWebNode(Node):
@@ -108,6 +124,27 @@ class RetrieveRAGNode(Node):
         shared["rag_results"] = exec_res
         shared.setdefault("metrics", {}).setdefault("rag_hits", 0)
         shared["metrics"]["rag_hits"] = len(exec_res)
+
+
+class ExecuteMCPToolNode(Node):
+    """Executes a tool from the MCP server."""
+
+    def prep(self, shared):
+        return {
+            "name": shared.get("tool_name"),
+            "args": shared.get("tool_args", {})
+        }
+
+    def exec(self, prep_res):
+        tool_name = prep_res["name"]
+        tool_args = prep_res["args"]
+        print(f"🛠️ ExecuteMCPToolNode: Calling tool '{tool_name}' with args {tool_args}")
+        return call_tool(tool_name, tool_args)
+
+    def post(self, shared, prep_res, exec_res):
+        result_str = f"Tool '{prep_res['name']}' returned: {exec_res}"
+        shared["context"] = shared.get("context", "") + "\n\n" + result_str
+        return "decide"
 
 
 class AnswerNode(Node):

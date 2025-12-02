@@ -13,6 +13,7 @@ from .nodes import (
     EmbedQueryNode,
     RetrieveRAGNode,
     SearchWebNode,
+    ExecuteMCPToolNode,
 )
 
 
@@ -22,12 +23,17 @@ def create_research_flow() -> Flow:
     search = SearchWebNode()
     embed_query = EmbedQueryNode()
     retrieve = RetrieveRAGNode()
+    execute_tool = ExecuteMCPToolNode()
     answer = AnswerNode()
 
     decide - "search" >> search
     decide - "rag" >> embed_query
+    decide - "tool" >> execute_tool
     decide - "answer" >> answer
+    
     search - "decide" >> decide
+    execute_tool - "decide" >> decide
+    
     embed_query >> retrieve >> answer
 
     return Flow(start=decide)

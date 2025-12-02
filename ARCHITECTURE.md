@@ -452,6 +452,116 @@ Modify `DecideActionNode.exec()` to implement custom routing:
 
 ---
 
+## Model Context Protocol (MCP) Integration
+
+MainAgent now supports **multiple MCP servers** for extended capabilities beyond traditional RAG and web search.
+
+### Architecture
+
+```mermaid
+graph TB
+    subgraph "MCP Integration"
+        Client[MCP Client]
+        Weather[Apify Weather Server]
+        Langfuse[Langfuse MCP Server]
+    end
+    
+    subgraph "Agent Flow"
+        Decide[DecideActionNode]
+        Execute[ExecuteMCPToolNode]
+    end
+    
+    Decide -->|Discovers tools| Client
+    Client -->|HTTP/SSE| Weather
+    Client -->|HTTP/SSE| Langfuse
+    Decide -->|action: tool| Execute
+    Execute -->|Calls tool| Client
+    Execute -->|Returns result| Decide
+```
+
+### Supported MCP Servers
+
+#### 1. Apify Weather Server
+**URL**: `https://jiri-spilka--weather-mcp-server.apify.actor/mcp`
+
+**Tools**:
+- `weather_get_weather` - Current weather for any city
+- `weather_get_weather_by_datetime_range` - Historical weather data
+- `weather_get_current_datetime` - Current time for any timezone
+
+**Configuration**:
+```bash
+APIFY_API_TOKEN=apify_api_your_token_here
+```
+
+#### 2. Langfuse MCP Server
+**URL**: `{LANGFUSE_HOST}/api/public/mcp`
+
+**Tools** (Prompt Management & Observability):
+- `langfuse_list_prompts` - List all prompts
+- `langfuse_get_prompt` - Get a specific prompt
+- `langfuse_compile_prompt` - Compile prompt with variables
+- `langfuse_create_prompt` - Create new prompt
+- And more...
+
+**Configuration**:
+```bash
+LANGFUSE_HOST=https://cloud.langfuse.com
+LANGFUSE_PUBLIC_KEY=pk-lf-your_public_key_here
+LANGFUSE_SECRET_KEY=sk-lf-your_secret_key_here
+```
+
+### How It Works
+
+1. **Tool Discovery**: On startup, `DecideActionNode` queries all configured MCP servers
+2. **Tool Naming**: Tools are prefixed with server name (e.g., `weather_get_weather`)
+3. **Routing**: `ExecuteMCPToolNode` routes tool calls to the appropriate server
+4. **Dynamic**: Servers can be enabled/disabled by adding/removing credentials
+
+### Updated Flow
+
+```mermaid
+flowchart TD
+    Start([User Question]) --> Decide{🤔 DecideActionNode}
+    
+    Decide -->|Need weather| Tool[🛠️ ExecuteMCPToolNode]
+    Decide -->|Need prompts| Tool
+    Decide -->|Need search| Search[🔍 SearchWebNode]
+    Decide -->|Need RAG| Embed[🧮 EmbedQueryNode]
+    Decide -->|Can answer| Answer[✍️ AnswerNode]
+    
+    Tool -->|Add context| Decide
+    Search -->|Add context| Decide
+    Embed --> Retrieve[📚 RetrieveRAGNode]
+    Retrieve --> Answer
+    
+    Answer --> End([Return Answer])
+```
+
+### Example Questions
+
+With MCP servers configured:
+- "What's the weather in Paris?" → Uses `weather_get_weather`
+- "What time is it in Tokyo?" → Uses `weather_get_current_datetime`
+- "List my prompts" → Uses `langfuse_list_prompts`
+- "Get the customer_greeting prompt" → Uses `langfuse_get_prompt`
+
+### Adding More MCP Servers
+
+To add a new MCP server, edit `backend/agent/mcp_client.py`:
+
+```python
+MCP_SERVERS = {
+    "your_server": {
+        "url": "https://your-mcp-server.com/mcp",
+        "auth_header": lambda: f"Bearer {os.getenv('YOUR_TOKEN', '')}",
+        "enabled": lambda: bool(os.getenv('YOUR_TOKEN'))
+    }
+}
+```
+
+---
+
 ## License & Credits
 
 Built with:
@@ -459,4 +569,6 @@ Built with:
 - [FastAPI](https://fastapi.tiangolo.com/) - Backend framework
 - [Next.js](https://nextjs.org/) - Frontend framework
 - [OpenAI](https://openai.com/) - LLM & Embeddings
-- [FAISS](https://github.com/facebookresearch/faiss) - Vector similarity search
+- [Pinecone](https://www.pinecone.io/) - Cloud vector database
+- [MCP](https://modelcontextprotocol.io/) - Model Context Protocol
+

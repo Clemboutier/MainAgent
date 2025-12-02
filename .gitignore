@@ -13,3 +13,11 @@ backend/__pycache__
 backend/data/*.faiss
 backend/data/*.pkl
 
+# markdown files (except ARCHITECTURE.md and README.md)
+*.md
+!ARCHITECTURE.md
+!README.md
+
+# verification scripts
+backend/verify_pinecone.py
+# backend/verify_mcp.py
