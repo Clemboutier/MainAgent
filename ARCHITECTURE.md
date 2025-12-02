@@ -61,7 +61,7 @@ graph TB
 
 ---
 
-## Agent Flow Logic
+## Agent Graph 
 
 The MainAgent uses a **decision-based routing system** where the `DecideActionNode` acts as an intelligent orchestrator, determining the best path to answer each question.
 
