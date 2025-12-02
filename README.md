@@ -1,7 +1,7 @@
 # MainAgent
 
 PocketFlow-based research assistant with:
-- FastAPI backend hosting the PocketFlow flow, web search, and FAISS-backed RAG.
+- FastAPI backend hosting orchestration layer: flow, web search, FAISS-backed RAG, a couple MCP servers connected.
 - Next.js frontend that exposes a chat widget plus an evaluation panel.
 - Vercel-friendly deployment (frontend + Python serverless backend).
 
