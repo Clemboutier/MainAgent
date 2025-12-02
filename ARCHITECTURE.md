@@ -24,13 +24,19 @@ graph TB
         Search[🔍 SearchWebNode]
         Embed[🧮 EmbedQueryNode]
         Retrieve[📚 RetrieveRAGNode]
+        ExecuteTool[🛠️ ExecuteMCPToolNode]
         Answer[✍️ AnswerNode]
     end
     
     subgraph "External Services"
         OpenAI[OpenAI API<br/>LLM & Embeddings]
         DuckDuckGo[DuckDuckGo<br/>Web Search]
-        FAISS[FAISS Vector Store<br/>Local RAG Index]
+        Pinecone[Pinecone<br/>Cloud Vector DB]
+    end
+    
+    subgraph "MCP Servers"
+        Weather[Apify Weather<br/>HTTP/SSE]
+        Langfuse[Langfuse Prompts<br/>HTTP/SSE]
     end
     
     UI -->|POST /api/chat| API
@@ -39,11 +45,14 @@ graph TB
     
     Decide --> Search
     Decide --> Embed
+    Decide --> ExecuteTool
     Decide --> Answer
     
     Search --> DuckDuckGo
     Embed --> OpenAI
-    Retrieve --> FAISS
+    Retrieve --> Pinecone
+    ExecuteTool --> Weather
+    ExecuteTool --> Langfuse
     Answer --> OpenAI
     
     API -->|Response| UI
@@ -61,11 +70,13 @@ flowchart TD
     
     Decide -->|Need more context| Search[🔍 SearchWebNode<br/>Web Search]
     Decide -->|Use knowledge base| Embed[🧮 EmbedQueryNode<br/>Generate Embedding]
+    Decide -->|Use MCP tool| ExecuteTool[🛠️ ExecuteMCPToolNode<br/>Call External Tool]
     Decide -->|Can answer directly| Answer[✍️ AnswerNode<br/>Synthesize Response]
     
     Search -->|Add context| Decide
+    ExecuteTool -->|Add result| Decide
     
-    Embed --> Retrieve[📚 RetrieveRAGNode<br/>Query FAISS Index]
+    Embed --> Retrieve[📚 RetrieveRAGNode<br/>Query Pinecone Index]
     Retrieve -->|Retrieved docs| Answer
     
     Answer --> End([Return Answer])
@@ -74,6 +85,7 @@ flowchart TD
     style Search fill:#87ceeb,stroke:#333,stroke-width:2px
     style Embed fill:#98fb98,stroke:#333,stroke-width:2px
     style Retrieve fill:#dda0dd,stroke:#333,stroke-width:2px
+    style ExecuteTool fill:#ff69b4,stroke:#333,stroke-width:2px
     style Answer fill:#ffa07a,stroke:#333,stroke-width:2px
 ```
 
@@ -87,11 +99,13 @@ flowchart TD
 **Actions**:
 - Analyzes the user's question
 - Evaluates existing context and RAG results
-- Decides next action: `search`, `rag`, or `answer`
+- Discovers available MCP tools
+- Decides next action: `search`, `rag`, `tool`, or `answer`
 
 **Returns**:
 - `search`: Needs web search for current information
 - `rag`: Should query the knowledge base
+- `tool`: Should use an external MCP tool
 - `answer`: Has enough information to respond
 
 **Key Logic**:
@@ -100,7 +114,8 @@ flowchart TD
 - Question complexity
 - Available context
 - RAG results quality
-- Need for external data
+- Available MCP tools
+- Need for external data or specialized tools
 ```
 
 ---
@@ -136,16 +151,47 @@ flowchart TD
 ---
 
 ### 📚 RetrieveRAGNode
-**Purpose**: Query local knowledge base
+**Purpose**: Query cloud-based knowledge base
 
 **Process**:
 1. Receives query embedding
-2. Searches FAISS vector index
+2. Searches Pinecone vector index
 3. Retrieves top-k (default: 3) most similar documents
 4. Returns document chunks with sources
 
 **Metrics Tracked**:
 - `rag_hits`: Number of documents retrieved
+
+---
+
+### 🛠️ ExecuteMCPToolNode
+**Purpose**: Execute external tools via Model Context Protocol
+
+**Process**:
+1. Receives tool name and arguments from DecideActionNode
+2. Routes request to appropriate MCP server (Weather, Langfuse, etc.)
+3. Executes tool via HTTP/SSE connection
+4. Returns result to shared context
+5. Returns to DecideActionNode for re-evaluation
+
+**Supported MCP Servers**:
+- **Apify Weather**: Weather data, timezone information
+- **Langfuse**: Prompt management, observability data
+
+**Tool Naming Convention**:
+- Tools are prefixed with server name: `weather_get_weather`, `langfuse_list_prompts`
+- Automatic routing based on prefix
+
+**Example Tools**:
+```python
+# Weather tools
+weather_get_weather(city="Paris")
+weather_get_current_datetime(timezone="Europe/Paris")
+
+# Langfuse tools
+langfuse_list_prompts()
+langfuse_get_prompt(name="greeting")
+```
 
 ---
 
@@ -178,10 +224,12 @@ sequenceDiagram
     participant Search
     participant Embed
     participant Retrieve
+    participant ExecuteTool
     participant Answer
     participant OpenAI
     participant DuckDuckGo
-    participant FAISS
+    participant Pinecone
+    participant MCPServers
 
     User->>Frontend: Ask question
     Frontend->>API: POST /api/chat
@@ -198,13 +246,20 @@ sequenceDiagram
         Search->>Decide: Re-evaluate with context
     end
     
+    alt MCP Tool needed
+        Decide->>ExecuteTool: tool_name, tool_args
+        ExecuteTool->>MCPServers: HTTP/SSE request
+        MCPServers-->>ExecuteTool: Tool result
+        ExecuteTool->>Decide: Re-evaluate with result
+    end
+    
     alt RAG needed
         Decide->>Embed: question
         Embed->>OpenAI: Generate embedding
         OpenAI-->>Embed: Vector
         Embed->>Retrieve: embedding
-        Retrieve->>FAISS: Similarity search
-        FAISS-->>Retrieve: Top documents
+        Retrieve->>Pinecone: Similarity search
+        Pinecone-->>Retrieve: Top documents
         Retrieve->>Answer: rag_results
     end
     
@@ -233,11 +288,14 @@ shared = {
     "search_history": list,    # History of search results
     "search_query": str,       # Current search query
     "query_embedding": list,   # Vector embedding of question
-    "rag_results": list,       # Retrieved documents from FAISS
+    "rag_results": list,       # Retrieved documents from Pinecone
+    "tool_name": str,          # MCP tool to execute
+    "tool_args": dict,         # Arguments for MCP tool
     "answer": str,             # Final answer
     "metrics": {
         "search_count": int,   # Number of searches performed
-        "rag_hits": int        # Number of RAG documents retrieved
+        "rag_hits": int,       # Number of RAG documents retrieved
+        "tool_calls": int      # Number of MCP tool calls
     }
 }
 ```
@@ -322,7 +380,9 @@ graph LR
 | **LLM** | OpenAI GPT | Language understanding & generation |
 | **Embeddings** | OpenAI text-embedding | Vector generation |
 | **Search** | DuckDuckGo | Web search without API key |
-| **Vector Store** | FAISS | Efficient similarity search |
+| **Vector Store** | Pinecone | Cloud-based vector database |
+| **MCP Protocol** | Official MCP SDK | External tool integration |
+| **MCP Servers** | Apify Weather, Langfuse | Weather data, prompt management |
 | **Environment** | python-dotenv | Configuration management |
 
 ---
@@ -331,13 +391,26 @@ graph LR
 
 ### Environment Variables
 ```bash
-OPENAI_API_KEY=sk-...              # Required: OpenAI API key
-SEARCH_API_KEY=optional            # Optional: Alternative search API
-RAG_INDEX_PATH=backend/data/index.faiss  # FAISS index location
-RAG_STORE_PATH=backend/data/store.pkl    # Document metadata store
-BACKEND_URL=http://localhost:8000        # Backend API URL
-FRONTEND_URL=http://localhost:3000       # Frontend URL
-NEXT_PUBLIC_BACKEND_URL=http://localhost:8000  # Frontend env
+# Required
+OPENAI_API_KEY=sk-...              # OpenAI API key
+
+# Pinecone (RAG)
+PINECONE_API_KEY=your-key          # Pinecone API key
+PINECONE_INDEX_NAME=mainagent-rag  # Index name (default: mainagent-rag)
+PINECONE_DIMENSION=1536            # Vector dimension (default: 1536)
+PINECONE_CLOUD=aws                 # Cloud provider (default: aws)
+PINECONE_REGION=us-east-1          # Region (default: us-east-1)
+
+# MCP Servers (Optional)
+APIFY_API_TOKEN=apify_api_...      # Apify Weather Server
+LANGFUSE_HOST=https://cloud.langfuse.com
+LANGFUSE_PUBLIC_KEY=pk-lf-...      # Langfuse prompt management
+LANGFUSE_SECRET_KEY=sk-lf-...
+
+# Application URLs
+BACKEND_URL=http://localhost:8000
+FRONTEND_URL=http://localhost:3000
+NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
 ```
 
 ---
@@ -345,9 +418,16 @@ NEXT_PUBLIC_BACKEND_URL=http://localhost:8000  # Frontend env
 ## Running the Application
 
 ### Backend
+**Note**: Python 3.10+ is required for MCP support
+
 ```bash
 cd backend
-pip install -r requirements.txt
+pip3 install -r requirements.txt
+
+# For MCP support, use Python 3.10+
+/opt/homebrew/bin/python3.10 -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+# Or with default Python 3
 python3 -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
