@@ -213,6 +213,31 @@ langfuse_get_prompt(name="greeting")
 
 ---
 
+## Session Memory
+
+Throughout the flow execution, collect user inputs and on going context in the **Session Memory**:
+
+```python
+shared = {
+    "question": str,           # Original user question
+    "context": str,            # Accumulated web search context
+    "search_history": list,    # History of search results
+    "search_query": str,       # Current search query
+    "query_embedding": list,   # Vector embedding of question
+    "rag_results": list,       # Retrieved documents from Pinecone
+    "tool_name": str,          # MCP tool to execute
+    "tool_args": dict,         # Arguments for MCP tool
+    "answer": str,             # Final answer
+    "metrics": {
+        "search_count": int,   # Number of searches performed
+        "rag_hits": int,       # Number of RAG documents retrieved
+        "tool_calls": int      # Number of MCP tool calls
+    }
+}
+```
+This agent doesn't have long-term memory yet.
+---
+
 ## Request Flow Sequence
 
 ```mermaid
@@ -274,31 +299,6 @@ sequenceDiagram
     Flow-->>API: Result
     API-->>Frontend: JSON response
     Frontend-->>User: Display answer
-```
-
----
-
-## Data Flow & Shared State
-
-Throughout the flow execution, nodes communicate via a **shared state dictionary**:
-
-```python
-shared = {
-    "question": str,           # Original user question
-    "context": str,            # Accumulated web search context
-    "search_history": list,    # History of search results
-    "search_query": str,       # Current search query
-    "query_embedding": list,   # Vector embedding of question
-    "rag_results": list,       # Retrieved documents from Pinecone
-    "tool_name": str,          # MCP tool to execute
-    "tool_args": dict,         # Arguments for MCP tool
-    "answer": str,             # Final answer
-    "metrics": {
-        "search_count": int,   # Number of searches performed
-        "rag_hits": int,       # Number of RAG documents retrieved
-        "tool_calls": int      # Number of MCP tool calls
-    }
-}
 ```
 
 ---
