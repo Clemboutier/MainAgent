@@ -207,9 +207,6 @@ langfuse_get_prompt(name="greeting")
 ---
 ### MCP Integration 
 
-
-### Architecture
-
 ```mermaid
 graph TB
     subgraph "MCP Integration"
