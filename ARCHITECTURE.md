@@ -371,50 +371,6 @@ graph LR
 
 ---
 
-## Technology Stack
-
-| Layer | Technology | Purpose |
-|-------|-----------|---------|
-| **Frontend** | Next.js 14 | React-based UI framework |
-| **Backend** | FastAPI | High-performance Python API |
-| **Orchestration** | PocketFlow | Node-based workflow engine |
-| **LLM** | OpenAI GPT | Language understanding & generation |
-| **Embeddings** | OpenAI text-embedding | Vector generation |
-| **Search** | DuckDuckGo | Web search without API key |
-| **Vector Store** | Pinecone | Cloud-based vector database |
-| **MCP Protocol** | Official MCP SDK | External tool integration |
-| **MCP Servers** | Apify Weather, Langfuse | Weather data, prompt management |
-| **Environment** | python-dotenv | Configuration management |
-
----
-
-## Configuration
-
-### Environment Variables
-```bash
-# Required
-OPENAI_API_KEY=sk-...              # OpenAI API key
-
-# Pinecone (RAG)
-PINECONE_API_KEY=your-key          # Pinecone API key
-PINECONE_INDEX_NAME=mainagent-rag  # Index name (default: mainagent-rag)
-PINECONE_DIMENSION=1536            # Vector dimension (default: 1536)
-PINECONE_CLOUD=aws                 # Cloud provider (default: aws)
-PINECONE_REGION=us-east-1          # Region (default: us-east-1)
-
-# MCP Servers (Optional)
-APIFY_API_TOKEN=apify_api_...      # Apify Weather Server
-LANGFUSE_HOST=https://cloud.langfuse.com
-LANGFUSE_PUBLIC_KEY=pk-lf-...      # Langfuse prompt management
-LANGFUSE_SECRET_KEY=sk-lf-...
-
-# Application URLs
-BACKEND_URL=http://localhost:8000
-FRONTEND_URL=http://localhost:3000
-NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
-```
-
----
 
 ## Running the Application
 
@@ -464,50 +420,6 @@ The `/api/evals` endpoint provides real-time metrics:
 - Search count per request
 - RAG hits per request
 - Session tracking
-
----
-
-## Extension Points
-
-### Adding New Nodes
-1. Create node class inheriting from `pocketflow.Node`
-2. Implement `prep()`, `exec()`, and `post()` methods
-3. Wire into flow in `flow.py`
-4. Add emoji print statement for monitoring
-
-### Custom Decision Logic
-Modify `DecideActionNode.exec()` to implement custom routing:
-- Add new action types
-- Implement multi-step reasoning
-- Add confidence thresholds
-
-### Alternative Data Sources
-- Replace DuckDuckGo with Google/Bing
-- Add database queries
-- Integrate APIs (weather, stocks, etc.)
-
----
-
-## Performance Considerations
-
-- **Caching**: Consider caching embeddings for repeated questions
-- **Async Operations**: Search and embedding calls could be parallelized
-- **Rate Limiting**: Implement rate limits for OpenAI API calls
-- **Vector Index**: FAISS index size impacts retrieval speed
-- **Context Window**: Monitor token usage in LLM calls
-
----
-
-## Future Enhancements
-
-- [ ] Multi-turn conversation support
-- [ ] Streaming responses
-- [ ] Custom RAG document upload
-- [ ] Advanced search filters
-- [ ] Response quality scoring
-- [ ] A/B testing different prompts
-- [ ] User feedback collection
-- [ ] Cost tracking per request
 
 ---
 
@@ -642,14 +554,3 @@ MCP_SERVERS = {
 ```
 
 ---
-
-## License & Credits
-
-Built with:
-- [PocketFlow](https://github.com/the-pocket/pocketflow) - Workflow orchestration
-- [FastAPI](https://fastapi.tiangolo.com/) - Backend framework
-- [Next.js](https://nextjs.org/) - Frontend framework
-- [OpenAI](https://openai.com/) - LLM & Embeddings
-- [Pinecone](https://www.pinecone.io/) - Cloud vector database
-- [MCP](https://modelcontextprotocol.io/) - Model Context Protocol
-
