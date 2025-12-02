@@ -399,28 +399,6 @@ The `/api/evals` endpoint provides real-time metrics:
 
 ---
 
-## Troubleshooting
-
-### Common Issues
-
-**"OPENAI_API_KEY is not set"**
-- Ensure `.env` file exists in `backend/` directory
-- Restart the backend server after adding `.env`
-
-**"Module not found" errors**
-- Run `pip install -r requirements.txt` in backend
-- Run `npm install` in frontend
-
-**FAISS index not found**
-- Create `backend/data/` directory
-- Initialize FAISS index or remove RAG path from `.env`
-
-**CORS errors**
-- Check `NEXT_PUBLIC_BACKEND_URL` in frontend `.env`
-- Verify CORS middleware in `main.py`
-
----
-
 ## Model Context Protocol (MCP) Integration
 
 MainAgent now supports **multiple MCP servers** for extended capabilities beyond traditional RAG and web search.
@@ -515,18 +493,4 @@ With MCP servers configured:
 - "List my prompts" → Uses `langfuse_list_prompts`
 - "Get the customer_greeting prompt" → Uses `langfuse_get_prompt`
 
-### Adding More MCP Servers
 
-To add a new MCP server, edit `backend/agent/mcp_client.py`:
-
-```python
-MCP_SERVERS = {
-    "your_server": {
-        "url": "https://your-mcp-server.com/mcp",
-        "auth_header": lambda: f"Bearer {os.getenv('YOUR_TOKEN', '')}",
-        "enabled": lambda: bool(os.getenv('YOUR_TOKEN'))
-    }
-}
-```
-
----
