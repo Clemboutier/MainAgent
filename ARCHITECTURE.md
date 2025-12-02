@@ -235,7 +235,6 @@ shared = {
     }
 }
 ```
-This agent doesn't have long-term memory yet.
 ---
 
 ## Request Flow Sequence
