@@ -16,10 +16,10 @@ graph TB
     
     subgraph "Backend Layer"
         API[FastAPI Server<br/>Port 8000]
-        Flow[PocketFlow Engine]
+        Orchestration[Orchestration Engine]
     end
     
-    subgraph "Agent Nodes"
+    subgraph "Agent"
         Decide[🤔 DecideActionNode]
         Search[🔍 SearchWebNode]
         Embed[🧮 EmbedQueryNode]
@@ -40,13 +40,14 @@ graph TB
     end
     
     UI -->|POST /api/chat| API
-    API -->|Run Flow| Flow
-    Flow --> Decide
+    API -->|Run Orchestration| Orchestration
+    Orchestration --> Decide
     
     Decide --> Search
     Decide --> Embed
     Decide --> ExecuteTool
     Decide --> Answer
+    Decide --> Retrieve
     
     Search --> DuckDuckGo
     Embed --> OpenAI
