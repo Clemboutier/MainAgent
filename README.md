@@ -293,6 +293,162 @@ shared = {
     }
 }
 ```
+
+---
+
+## Conversation Memory System
+
+MainAgent implements a **two-tier memory system** for maintaining conversation context:
+
+### 🔄 Short-Term Memory (Sliding Window)
+
+**Purpose**: Immediate conversation context
+
+**How it Works**:
+- Maintains the **last 3 conversation pairs** (6 messages total) in active memory
+- Provides immediate context for ongoing conversation
+- Automatically slides forward as new messages arrive
+
+**Storage**: `shared["messages"]` - List of recent message dicts
+
+**Example**:
+```python
+[
+    {"role": "user", "content": "What's the weather in Paris?"},
+    {"role": "assistant", "content": "It's currently 18°C and sunny in Paris."},
+    {"role": "user", "content": "And in London?"},
+    {"role": "assistant", "content": "London is 15°C with light rain."},
+    {"role": "user", "content": "Which is warmer?"},
+    {"role": "assistant", "content": "Paris is warmer at 18°C vs London's 15°C."}
+]
+```
+
+### 🧠 Long-Term Memory (Pinecone Vector Index)
+
+**Purpose**: Retrieve relevant past conversations
+
+**How it Works**:
+1. When short-term memory exceeds 6 messages, the **oldest pair is archived**
+2. Each archived conversation is **embedded** using OpenAI embeddings
+3. Embeddings are stored in **Pinecone** (same database as RAG) with session metadata
+4. When a new question arrives, the system **retrieves the most relevant** past conversation
+5. Retrieved memory is **injected into context** for the LLM
+
+**Storage**:
+- **Pinecone Index**: `mainagent-memory` (or configured via `PINECONE_MEMORY_INDEX`)
+- **Metadata**: Each memory includes `session_id`, `user_message`, `assistant_message`, `timestamp`
+- **Filtering**: Memories are filtered by session to ensure privacy
+
+**Why Pinecone for Memory?**:
+✅ **Unified Infrastructure**: Same database for RAG and memory  
+✅ **Cloud-Native**: Persists across server restarts  
+✅ **Multi-User**: Each session has isolated memory via metadata filtering  
+✅ **Scalable**: Handles unlimited conversation history  
+✅ **Fast**: Sub-millisecond similarity search  
+
+**Architecture**:
+
+```mermaid
+graph LR
+    subgraph "Short-Term Memory"
+        Recent[Last 3 Pairs<br/>6 Messages]
+    end
+    
+    subgraph "Long-Term Memory (Pinecone)"
+        Archive[Archived Conversations]
+        Pinecone[Pinecone Vector Index]
+        Embeddings[Conversation Embeddings]
+    end
+    
+    Recent -->|Exceeds 6 messages| Archive
+    Archive -->|Generate embedding| Embeddings
+    Embeddings -->|Store with session_id| Pinecone
+    
+    Query[New Question] -->|Search by session| Pinecone
+    Pinecone -->|Retrieve| Relevant[Relevant Past Conversation]
+    Relevant -->|Inject into context| LLM[Answer Generation]
+    Recent -->|Provide| LLM
+```
+
+### Memory Flow Example
+
+```
+Conversation 1:
+User: "My cat's name is Whiskers"
+Assistant: "Got it! Whiskers is your cat's name."
+→ Stored in short-term memory
+
+Conversation 2:
+User: "I have a peanut allergy"
+Assistant: "Understood, you have a peanut allergy."
+→ Stored in short-term memory
+
+Conversation 3:
+User: "My anniversary is June 17th"
+Assistant: "Noted! Your anniversary is June 17th."
+→ Stored in short-term memory
+
+Conversation 4:
+User: "I lived in Portugal for 3 years"
+Assistant: "Great to know you lived in Portugal!"
+→ Conversation 1 archived to long-term memory (embedded)
+→ Conversations 2, 3, 4 remain in short-term
+
+Later...
+User: "What's my cat's name?"
+→ System searches long-term memory
+→ Retrieves Conversation 1 (high similarity)
+→ Combines with recent context
+Assistant: "Your cat's name is Whiskers."
+```
+
+### Memory Retrieval Process
+
+1. **Query Embedding**: New question is converted to vector
+2. **Similarity Search**: Pinecone finds most similar past conversation (filtered by session_id)
+3. **Context Injection**: Retrieved conversation is added to prompt:
+   ```
+   System: The following is a relevant past conversation:
+   User: My cat's name is Whiskers
+   Assistant: Got it! Whiskers is your cat's name.
+   
+   System: Now continue the current conversation:
+   User: What's my cat's name?
+   ```
+4. **Answer Generation**: LLM uses both recent + retrieved context
+
+### Benefits
+
+✅ **Scalable**: Can handle unlimited conversation history  
+✅ **Efficient**: Only keeps recent messages in active memory  
+✅ **Contextual**: Retrieves relevant past information automatically  
+✅ **Fast**: Pinecone provides sub-millisecond similarity search  
+✅ **Semantic**: Finds conversations by meaning, not keywords  
+✅ **Persistent**: Memory survives server restarts  
+✅ **Multi-User**: Isolated memory per session via metadata filtering
+
+### Configuration
+
+```python
+# Memory settings (in agent/memory.py)
+WINDOW_SIZE = 6                    # Messages to keep in short-term memory
+EMBEDDING_DIMENSION = 1536         # OpenAI embedding dimension
+RETRIEVAL_K = 1                    # Number of past conversations to retrieve
+
+# Environment variables
+PINECONE_API_KEY=your_key          # Required: Pinecone API key
+PINECONE_MEMORY_INDEX=mainagent-memory  # Optional: Memory index name (default: mainagent-memory)
+```
+
+### Session Management
+
+Each user session maintains its own memory:
+- Sessions are identified by `session_id` in API requests
+- Each session has independent short-term and long-term memory
+- Memory persists for the duration of the session
+- Sessions can be cleared or archived as needed
+
+
 ---
 
 ## Request Flow Sequence

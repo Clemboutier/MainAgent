@@ -1,8 +1,5 @@
 """
 Flow wiring for the MainAgent PocketFlow pipeline.
-
-The concrete nodes will be implemented in future tasks; for now we expose
-factory helpers so the FastAPI server can instantiate the flow easily.
 """
 
 from pocketflow import Flow
