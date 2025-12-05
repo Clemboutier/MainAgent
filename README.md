@@ -19,19 +19,25 @@ graph TB
         Orchestration[Orchestration Engine]
     end
     
-    subgraph "Agent"
+    subgraph "Agent Nodes"
+        RetrieveMem[🧠 RetrieveMemoryNode]
         Decide[🤔 DecideActionNode]
         Search[🔍 SearchWebNode]
         Embed[🧮 EmbedQueryNode]
         Retrieve[📚 RetrieveRAGNode]
         ExecuteTool[🛠️ ExecuteMCPToolNode]
         Answer[✍️ AnswerNode]
+        ArchiveMem[💾 ArchiveMemoryNode]
     end
     
     subgraph "External Services"
         OpenAI[OpenAI API<br/>LLM & Embeddings]
         DuckDuckGo[DuckDuckGo<br/>Web Search]
-        Pinecone[Pinecone<br/>Cloud Vector DB]
+    end
+    
+    subgraph "Pinecone Cloud"
+        PineconeRAG[RAG Index<br/>mainagent-rag]
+        PineconeMemory[Memory Index<br/>mainagent-memory]
     end
     
     subgraph "MCP Servers"
@@ -41,20 +47,25 @@ graph TB
     
     UI -->|POST /api/chat| API
     API -->|Run Orchestration| Orchestration
-    Orchestration --> Decide
+    Orchestration --> RetrieveMem
+    RetrieveMem --> Decide
     
     Decide --> Search
     Decide --> Embed
     Decide --> ExecuteTool
     Decide --> Answer
-    Decide --> Retrieve
     
     Search --> DuckDuckGo
-    Embed --> OpenAI
-    Retrieve --> Pinecone
+    Embed --> Retrieve
+    Retrieve --> PineconeRAG
+    Retrieve --> Answer
     ExecuteTool --> Weather
     ExecuteTool --> Langfuse
     Answer --> OpenAI
+    Answer --> ArchiveMem
+    
+    RetrieveMem -->|Query past conversations| PineconeMemory
+    ArchiveMem -->|Store old conversations| PineconeMemory
     
     API -->|Response| UI
 ```
@@ -63,11 +74,12 @@ graph TB
 
 ## Agent Graph 
 
-The MainAgent uses a **decision-based routing system** where the `DecideActionNode` acts as an intelligent orchestrator, determining the best path to answer each question.
+The MainAgent uses a **decision-based routing system** with **conversation memory**. The flow starts by retrieving relevant past conversations, then routes through decision-making, and archives old conversations when needed.
 
 ```mermaid
 flowchart TD
-    Start([User Question]) --> Decide{🤔 DecideActionNode}
+    Start([User Question]) --> RetrieveMem[🧠 RetrieveMemoryNode<br/>Fetch relevant past conversations]
+    RetrieveMem --> Decide{🤔 DecideActionNode<br/>With memory context}
     
     Decide -->|Need weather| Tool[🛠️ ExecuteMCPToolNode]
     Decide -->|Need prompts| Tool
@@ -80,7 +92,10 @@ flowchart TD
     Embed --> Retrieve[📚 RetrieveRAGNode]
     Retrieve --> Answer
     
-    Answer --> End([Return Answer])
+    Answer --> Archive{Messages > 6?}
+    Archive -->|Yes| ArchiveMem[💾 ArchiveMemoryNode<br/>Store to long-term memory]
+    Archive -->|No| End([Return Answer])
+    ArchiveMem --> End
 ```
 
 ---
